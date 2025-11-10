@@ -1,89 +1,243 @@
-import java.util.Scanner;
-
-class BankAccount {
-    private double balance;
-
-    public BankAccount(double initialBalance) {
-        this.balance = initialBalance;
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ATM Simulator — Card + PIN</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#94a3b8;
+      --success:#16a34a; --danger:#ef4444; --glass: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
     }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071022,#061627);color:#e6eef6}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+    .atm{width:980px;max-width:100%;display:grid;grid-template-columns:420px 1fr;gap:22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:14px;padding:22px;box-shadow:0 8px 30px rgba(2,6,23,0.7);border:1px solid rgba(255,255,255,0.03);}
+    .machine{background:linear-gradient(180deg,var(--card),rgba(8,12,20,0.85));border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px}
+    .screen{background:linear-gradient(180deg,rgba(2,6,23,0.9),rgba(4,8,16,0.85));padding:18px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);min-height:150px;display:flex;flex-direction:column;gap:8px;justify-content:center}
+    .screen h1{font-size:18px;margin:0;color:var(--accent);letter-spacing:0.6px}
+    .screen p{margin:0;color:var(--muted);font-size:13px}
+    .balance{margin-top:8px;font-size:24px;font-weight:600;color:#f8fafc}
+    .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+    button{background:var(--glass);border:1px solid rgba(255,255,255,0.04);color:#e6eef6;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+    .primary{background:linear-gradient(90deg, rgba(6,182,212,0.12), rgba(6,182,212,0.06)); border-color: rgba(6,182,212,0.4); color:var(--accent)}
+    .warn{background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-color: rgba(255,100,100,0.06); color:var(--danger)}
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
+    .form-row{display:flex;gap:8px;align-items:center}
+    input{flex:1;padding:10px 12px;border-radius:8px;background: rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:#e6eef6;outline:none}
+    .transactions{margin-top:6px;border-radius:8px;padding:10px;max-height:320px;overflow:auto;border:1px solid rgba(255,255,255,0.02)}
+    .tx{display:flex;justify-content:space-between;align-items:center;padding:8px 6px;border-bottom:1px dashed rgba(255,255,255,0.02);font-size:14px}
+    .msg{font-size:13px;color:var(--muted)}
+    .status{display:flex;align-items:center;gap:8px;margin-top:6px;min-height:26px;font-weight:600}
+    .status.ok{color:var(--success)} .status.err{color:var(--danger)}
+    .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:60}
+    .card-panel{width:360px;background:linear-gradient(180deg,#071827,#04101a);border-radius:12px;padding:18px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 8px 30px rgba(2,6,23,0.8)}
+    .card-panel h2{margin:0 0 8px 0;color:var(--accent)}
+    .small{font-size:13px;color:var(--muted)}
+    .locked{opacity:0.5;pointer-events:none}
+    @media (max-width:900px){.atm{grid-template-columns:1fr;padding:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="atm" role="application" aria-label="ATM Simulator">
+      <div class="machine">
+        <div class="screen" id="screen">
+          <h1>Welcome to JS Bank ATM</h1>
+          <p id="small">Please insert your card and enter PIN.</p>
+          <div class="balance" id="balance">$0.00</div>
+          <div class="status" id="status"></div>
+        </div>
 
-    public double getBalance() {
-        return balance;
-    }
+        <div class="controls" role="region" aria-label="ATM actions">
+          <button id="btnCheck" class="primary">Check Balance</button>
+          <button id="btnExit" class="warn">Exit</button>
+          <button id="btnDeposit">Deposit</button>
+          <button id="btnWithdraw">Withdraw</button>
+        </div>
 
-    public void deposit(double amount) {
-        if (amount > 0) {
-            balance += amount;
-            System.out.println("Deposit successful. New balance: $" + balance);
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <button id="insertCard" class="primary">Insert Card</button>
+          <button id="ejectCard">Eject Card</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Account Control</strong>
+          <span class="msg">Demo account • PIN only</span>
+        </div>
+
+        <div class="form-row">
+          <input id="amount" type="number" placeholder="Amount (eg. 50.75)" step="0.01" />
+          <button id="doDeposit" class="btn">Deposit</button>
+          <button id="doWithdraw" class="btn" style="background:#ef4444;color:white">Withdraw</button>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="note" type="text" placeholder="Optional note for transaction" />
+          <button id="clearLog" class="btn" style="background:rgba(255,255,255,0.04);color:var(--muted)">Clear Log</button>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Transactions</strong>
+          <small class="msg" id="txCount">0</small>
+        </div>
+
+        <div class="transactions" id="txList" aria-live="polite"></div>
+
+        <footer class="small">This sim uses a preloaded account (PIN protected). Refresh to reset.</footer>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true">
+    <div class="card-panel" role="document">
+      <h2>Card Reader</h2>
+      <p class="small">Click "Insert Card" to simulate inserting your card, then enter your 4-digit PIN.</p>
+
+      <div style="margin-top:12px" id="cardState">
+        <button id="cardInsertBtn" class="btn">Insert Card</button>
+        <button id="cardEjectBtn" class="btn" style="background:rgba(255,255,255,0.04);color:var(--muted)">Eject</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <input id="pinInput" type="password" maxlength="4" placeholder="Enter 4-digit PIN" />
+        <button id="pinSubmit" class="btn" style="margin-left:8px">Enter</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <div class="small" id="attempts">Attempts left: 3</div>
+        <div class="small" id="cardMsg"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const balanceEl = document.getElementById('balance');
+      const statusEl = document.getElementById('status');
+      const amountInput = document.getElementById('amount');
+      const doDepositBtn = document.getElementById('doDeposit');
+      const doWithdrawBtn = document.getElementById('doWithdraw');
+      const txList = document.getElementById('txList');
+      const txCount = document.getElementById('txCount');
+      const noteInput = document.getElementById('note');
+      const btnCheck = document.getElementById('btnCheck');
+      const btnExit = document.getElementById('btnExit');
+      const clearLogBtn = document.getElementById('clearLog');
+      const insertCard = document.getElementById('insertCard');
+      const ejectCard = document.getElementById('ejectCard');
+
+      const overlay = document.getElementById('overlay');
+      const pinInput = document.getElementById('pinInput');
+      const pinSubmit = document.getElementById('pinSubmit');
+      const attemptsEl = document.getElementById('attempts');
+      const cardMsg = document.getElementById('cardMsg');
+      const cardInsertBtn = document.getElementById('cardInsertBtn');
+      const cardEjectBtn = document.getElementById('cardEjectBtn');
+
+      // simulated account (preloaded)
+      let storedPin = '1234';        // change if you want a different PIN
+      let balance = 1000.00;         // preloaded balance for "your" account
+      let transactions = [];
+      let attemptsLeft = 3;
+      let cardInserted = false;
+      let loggedIn = false;
+
+      function formatMoney(n){ n = Number(n) || 0; return '$' + n.toFixed(2); }
+      function updateDisplay(){ balanceEl.textContent = formatMoney(balance); txCount.textContent = transactions.length; }
+      function pushTx(type, amt, note){ const item = {time:new Date(), type, amount: Number(amt).toFixed(2), note: note||''}; transactions.unshift(item); renderTx(); }
+      function renderTx(){ txList.innerHTML=''; transactions.forEach(t => { const div=document.createElement('div'); div.className='tx'; div.innerHTML = `<div><strong>${t.type}</strong><div class="msg">${t.note}</div></div><div><div>${formatMoney(t.amount)}</div><div class="msg" style="font-size:12px">${t.time.toLocaleString()}</div></div>`; txList.appendChild(div); }); txCount.textContent = transactions.length; }
+      function setStatus(msg, kind){ statusEl.textContent = msg||''; if(!msg){ statusEl.className='status'; return; } statusEl.className = 'status ' + (kind==='err'?'err':'ok'); setTimeout(()=>{ statusEl.textContent=''; statusEl.className='status'; }, 3000); }
+
+      function lockInterface(){ document.querySelectorAll('input, button').forEach(el => { if(!el.closest('.card-panel')) el.disabled = true; }); setStatus('Session locked. Refresh to reset.', 'err'); overlay.style.display = 'none'; }
+
+      // Card controls
+      function openOverlay(){ overlay.style.display = 'flex'; }
+      function closeOverlay(){ overlay.style.display = 'none'; }
+      function onCardInserted(){
+        cardInserted = true; cardMsg.textContent = 'Card inserted. Enter PIN.'; pinInput.disabled = false; pinInput.focus();
+        insertCard.disabled = true; ejectCard.disabled = false;
+      }
+      function onCardEjected(){
+        cardInserted = false; loggedIn = false; cardMsg.textContent = 'Card ejected.'; pinInput.value = ''; pinInput.disabled = true;
+        insertCard.disabled = false; ejectCard.disabled = true;
+        overlay.style.display = 'flex';
+      }
+
+      cardInsertBtn.addEventListener('click', () => { onCardInserted(); });
+      cardEjectBtn.addEventListener('click', () => { onCardEjected(); });
+      insertCard.addEventListener('click', () => { openOverlay(); onCardInserted(); });
+      ejectCard.addEventListener('click', () => { onCardEjected(); });
+
+      pinSubmit.addEventListener('click', () => {
+        if (!cardInserted) { cardMsg.textContent = 'No card inserted'; return; }
+        const pin = pinInput.value.trim();
+        if (!/^\d{4}$/.test(pin)) { cardMsg.textContent = 'Enter 4-digit PIN'; return; }
+        if (pin === storedPin) {
+          loggedIn = true;
+          attemptsLeft = 3;
+          attemptsEl.textContent = 'Attempts left: ' + attemptsLeft;
+          cardMsg.textContent = 'PIN OK — welcome';
+          setTimeout(() => { overlay.style.display = 'none'; setStatus('Login successful', 'ok'); }, 600);
         } else {
-            System.out.println("Invalid deposit amount. Please enter a positive value.");
+          attemptsLeft -= 1;
+          attemptsEl.textContent = 'Attempts left: ' + attemptsLeft;
+          cardMsg.textContent = 'Incorrect PIN';
+          setStatus('Incorrect PIN', 'err');
+          pinInput.value = '';
+          if (attemptsLeft <= 0) { lockInterface(); }
         }
-    }
+      });
 
-    public boolean withdraw(double amount) {
-        if (amount > 0 && amount <= balance) {
-            balance -= amount;
-            System.out.println("Withdrawal successful. New balance: $" + balance);
-            return true;
-        } else {
-            System.out.println("Insufficient funds or invalid amount for withdrawal.");
-            return false;
-        }
-    }
-}
+      // ATM actions (require logged in)
+      doDepositBtn.addEventListener('click', () => {
+        if (!loggedIn) { setStatus('Please insert card and login', 'err'); return; }
+        const v = parseFloat(amountInput.value);
+        if (isNaN(v) || v <= 0) { setStatus('Enter a positive deposit amount', 'err'); return; }
+        balance += Number(v);
+        updateDisplay();
+        pushTx('Deposit', v, noteInput.value);
+        setStatus('Deposit successful', 'ok');
+      });
 
-public class ATM {
-    private BankAccount userAccount;
+      doWithdrawBtn.addEventListener('click', () => {
+        if (!loggedIn) { setStatus('Please insert card and login', 'err'); return; }
+        const v = parseFloat(amountInput.value);
+        if (isNaN(v) || v <= 0) { setStatus('Enter a positive withdrawal amount', 'err'); return; }
+        if (v > balance) { setStatus('Insufficient funds', 'err'); return; }
+        balance -= Number(v);
+        updateDisplay();
+        pushTx('Withdraw', v, noteInput.value);
+        setStatus('Withdrawal successful', 'ok');
+      });
 
-    public ATM(BankAccount userAccount) {
-        this.userAccount = userAccount;
-    }
+      btnCheck.addEventListener('click', () => {
+        if (!loggedIn) { setStatus('Please insert card and login', 'err'); return; }
+        setStatus('Balance: ' + formatMoney(balance), 'ok');
+      });
 
-    public void displayMenu() {
-        System.out.println("\nATM Menu:");
-        System.out.println("1. Check Balance");
-        System.out.println("2. Deposit");
-        System.out.println("3. Withdraw");
-        System.out.println("4. Exit");
-    }
+      btnExit.addEventListener('click', () => {
+        setStatus('Session ended. Ejecting card.', 'ok');
+        onCardEjected();
+      });
 
-    public void processOption(int option, Scanner scanner) {
-        switch (option) {
-            case 1:
-                System.out.println("Your balance: $" + userAccount.getBalance());
-                break;
-            case 2:
-                System.out.print("Enter deposit amount: $");
-                double depositAmount = scanner.nextDouble();
-                userAccount.deposit(depositAmount);
-                break;
-            case 3:
-                System.out.print("Enter withdrawal amount: $");
-                double withdrawalAmount = scanner.nextDouble();
-                userAccount.withdraw(withdrawalAmount);
-                break;
-            case 4:
-                System.out.println("Thank you for using the ATM. Goodbye!");
-                System.exit(0);
-                break;
-            default:
-                System.out.println("Invalid option. Please choose a valid option.");
-        }
-    }
+      clearLogBtn.addEventListener('click', () => {
+        if (!loggedIn) { setStatus('Please insert card and login', 'err'); return; }
+        transactions = []; renderTx(); setStatus('Transaction log cleared', 'ok');
+      });
 
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter initial balance: $");
-        double initialBalance = scanner.nextDouble();
-
-        BankAccount userAccount = new BankAccount(initialBalance);
-        ATM atm = new ATM(userAccount);
-
-        while(true){
-            atm.displayMenu();
-            System.out.print("Choose an option (1-4): ");
-            int option = scanner.nextInt();
-            atm.processOption(option, scanner);
-        }
-    }
-}
+      // init
+      updateDisplay();
+      attemptsEl.textContent = 'Attempts left: ' + attemptsLeft;
+      overlay.style.display = 'flex';
+      pinInput.disabled = true;
+      ejectCard.disabled = true;
+    })();
+  </script>
+</body>
+</html>
